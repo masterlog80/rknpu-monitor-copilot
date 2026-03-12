@@ -22,6 +22,8 @@ TS_FORMAT = "%Y-%m-%dT%H:%M:%S"
 NPU_PERCENTAGE_PATTERN = re.compile(r"(\d+(?:\.\d+)?)%")
 # Purge old records once every this many samples (~every PURGE_EVERY * POLL_INTERVAL seconds)
 PURGE_EVERY = 100
+# Downsample records older than 24 hours
+DOWNSAMPLE_AFTER_HOURS = 24
 
 # ── Configuration from environment variables ─────────────────────────────────
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "10"))       # seconds
@@ -54,8 +56,9 @@ def get_db() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create the metrics table if it doesn't exist."""
+    """Create the metrics tables if they don't exist."""
     with get_db() as conn:
+        # Fine-grained metrics (collected every POLL_INTERVAL)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS metrics (
@@ -67,25 +70,109 @@ def init_db() -> None:
             )
             """
         )
+        # Downsampled metrics (hourly averages for data older than 24 hours)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS metrics_downsampled (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                hour      TEXT    NOT NULL UNIQUE,
+                cpu       REAL    NOT NULL,
+                memory    REAL    NOT NULL,
+                npu       REAL    NOT NULL
+            )
+            """
+        )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_timestamp ON metrics(timestamp)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hour ON metrics_downsampled(hour)"
         )
         conn.commit()
     log.info("Database initialised at %s", DB_PATH)
 
 
+def downsample_old_metrics() -> None:
+    """
+    Downsample metrics older than DOWNSAMPLE_AFTER_HOURS into hourly averages.
+    Replaces raw data with hourly aggregates to save space.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=DOWNSAMPLE_AFTER_HOURS)
+    cutoff_str = cutoff.strftime(TS_FORMAT)
+
+    with get_db() as conn:
+        # Get all metrics older than cutoff that haven't been downsampled
+        rows = conn.execute(
+            "SELECT timestamp, cpu, memory, npu FROM metrics "
+            "WHERE timestamp < ? "
+            "ORDER BY timestamp ASC",
+            (cutoff_str,),
+        ).fetchall()
+
+        if not rows:
+            return
+
+        # Group by hour and calculate averages
+        hourly_data = {}
+        for row in rows:
+            # Extract hour from timestamp (YYYY-MM-DDTHH:00:00)
+            ts = row["timestamp"]
+            hour = ts[:13] + ":00:00"  # Truncate to hour
+            
+            if hour not in hourly_data:
+                hourly_data[hour] = {
+                    "cpu": [],
+                    "memory": [],
+                    "npu": [],
+                }
+            
+            hourly_data[hour]["cpu"].append(row["cpu"])
+            hourly_data[hour]["memory"].append(row["memory"])
+            hourly_data[hour]["npu"].append(row["npu"])
+
+        # Insert hourly averages into downsampled table
+        for hour, data in hourly_data.items():
+            avg_cpu = sum(data["cpu"]) / len(data["cpu"])
+            avg_memory = sum(data["memory"]) / len(data["memory"])
+            avg_npu = sum(data["npu"]) / len(data["npu"])
+
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO metrics_downsampled (hour, cpu, memory, npu) "
+                    "VALUES (?, ?, ?, ?)",
+                    (hour, round(avg_cpu, 1), round(avg_memory, 1), round(avg_npu, 1)),
+                )
+            except sqlite3.IntegrityError:
+                # Hour already exists, skip
+                pass
+
+        # Delete the raw metrics that have been downsampled
+        conn.execute(
+            "DELETE FROM metrics WHERE timestamp < ?",
+            (cutoff_str,),
+        )
+        conn.commit()
+        
+        deleted_count = len(rows)
+        log.info(
+            "Downsampled %d metrics older than %s into hourly averages",
+            deleted_count,
+            cutoff_str,
+        )
+
+
 def purge_old_records() -> None:
-    """Delete records older than RETENTION_DAYS."""
+    """Delete downsampled records older than RETENTION_DAYS."""
     cutoff = (
         datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)
     ).strftime(TS_FORMAT)
     with get_db() as conn:
         cursor = conn.execute(
-            "DELETE FROM metrics WHERE timestamp < ?", (cutoff,)
+            "DELETE FROM metrics_downsampled WHERE hour < ?", (cutoff,)
         )
         conn.commit()
     if cursor.rowcount:
-        log.debug("Purged %d old records (cutoff: %s)", cursor.rowcount, cutoff)
+        log.debug("Purged %d old downsampled records (cutoff: %s)", cursor.rowcount, cutoff)
 
 
 # ── Metric collectors ─────────────────────────────────────────────────────────
@@ -120,10 +207,10 @@ def read_npu() -> float:
         return 0.0
 
 
-# ── Background collector thread ────────────────��──────────────────────────────
+# ── Background collector thread ───────────────────────────────────────────────
 
 def collect_metrics() -> None:
-    """Continuously collect and store metrics, purging old data periodically."""
+    """Continuously collect and store metrics, downsampling and purging old data periodically."""
     purge_counter = 0
     while True:
         try:
@@ -141,9 +228,10 @@ def collect_metrics() -> None:
 
             log.debug("Stored: ts=%s cpu=%.1f mem=%.1f npu=%.1f", ts, cpu, memory, npu)
 
-            # Purge once every PURGE_EVERY samples
+            # Downsample and purge once every PURGE_EVERY samples
             purge_counter += 1
             if purge_counter >= PURGE_EVERY:
+                downsample_old_metrics()
                 purge_old_records()
                 purge_counter = 0
 
@@ -180,6 +268,7 @@ def api_history():
       hours  – look-back window in hours (default 1)
       start  – ISO-8601 start datetime (overrides hours)
       end    – ISO-8601 end datetime   (overrides hours)
+    Automatically uses downsampled data for periods older than 24 hours.
     """
     now = datetime.now(timezone.utc)
 
@@ -194,14 +283,28 @@ def api_history():
         start = (now - timedelta(hours=hours)).strftime(TS_FORMAT)
         end = now.strftime(TS_FORMAT)
 
+    cutoff = (now - timedelta(hours=DOWNSAMPLE_AFTER_HOURS)).strftime(TS_FORMAT)
+
     with get_db() as conn:
-        rows = conn.execute(
-            "SELECT timestamp, cpu, memory, npu FROM metrics "
-            "WHERE timestamp BETWEEN ? AND ? ORDER BY timestamp ASC",
-            (start, end),
+        # Get recent fine-grained data
+        recent_rows = conn.execute(
+            "SELECT timestamp as time, cpu, memory, npu FROM metrics "
+            "WHERE timestamp BETWEEN ? AND ? AND timestamp >= ? "
+            "ORDER BY timestamp ASC",
+            (start, end, cutoff),
         ).fetchall()
 
-    return jsonify([dict(r) for r in rows])
+        # Get older downsampled data
+        older_rows = conn.execute(
+            "SELECT hour as time, cpu, memory, npu FROM metrics_downsampled "
+            "WHERE hour BETWEEN ? AND ? AND hour < ? "
+            "ORDER BY hour ASC",
+            (start, end, cutoff),
+        ).fetchall()
+
+    # Combine both datasets
+    all_rows = [dict(r) for r in older_rows] + [dict(r) for r in recent_rows]
+    return jsonify(all_rows)
 
 
 @app.route("/api/metrics/export")
@@ -223,17 +326,28 @@ def api_export():
         start = (now - timedelta(hours=hours)).strftime(TS_FORMAT)
         end = now.strftime(TS_FORMAT)
 
+    cutoff = (now - timedelta(hours=DOWNSAMPLE_AFTER_HOURS)).strftime(TS_FORMAT)
+
     with get_db() as conn:
-        rows = conn.execute(
+        recent_rows = conn.execute(
             "SELECT timestamp, cpu, memory, npu FROM metrics "
-            "WHERE timestamp BETWEEN ? AND ? ORDER BY timestamp ASC",
-            (start, end),
+            "WHERE timestamp BETWEEN ? AND ? AND timestamp >= ? "
+            "ORDER BY timestamp ASC",
+            (start, end, cutoff),
+        ).fetchall()
+
+        older_rows = conn.execute(
+            "SELECT hour as timestamp, cpu, memory, npu FROM metrics_downsampled "
+            "WHERE hour BETWEEN ? AND ? AND hour < ? "
+            "ORDER BY hour ASC",
+            (start, end, cutoff),
         ).fetchall()
 
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["timestamp", "cpu_percent", "memory_percent", "npu_percent"])
-    for row in rows:
+    
+    for row in older_rows + recent_rows:
         writer.writerow([row["timestamp"], row["cpu"], row["memory"], row["npu"]])
 
     filename = f"metrics_{start[:10]}_{end[:10]}.csv"
@@ -252,6 +366,7 @@ def api_config():
             "poll_interval": POLL_INTERVAL,
             "retention_days": RETENTION_DAYS,
             "npu_load_path": NPU_LOAD_PATH,
+            "downsample_after_hours": DOWNSAMPLE_AFTER_HOURS,
         }
     )
 
@@ -268,9 +383,10 @@ init_db()
 collector = threading.Thread(target=collect_metrics, daemon=True, name="collector")
 collector.start()
 log.info(
-    "Started collector thread (interval=%ds, retention=%dd)",
+    "Started collector thread (interval=%ds, retention=%dd, downsample after %dh)",
     POLL_INTERVAL,
     RETENTION_DAYS,
+    DOWNSAMPLE_AFTER_HOURS,
 )
 
 
