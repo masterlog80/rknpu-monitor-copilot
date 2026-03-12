@@ -31,8 +31,8 @@ SQLite, and exposes a live web dashboard with interactive charts and CSV export.
 ### 1 – Clone the repository
 
 ```bash
-git clone https://github.com/masterlog80/-rknpu-monitor-copilot.git
-cd -rknpu-monitor-copilot
+git clone https://github.com/masterlog80/rknpu-monitor-copilot.git
+cd rknpu-monitor-copilot
 ```
 
 ### 2 – Create your environment file
