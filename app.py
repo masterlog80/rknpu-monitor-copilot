@@ -120,7 +120,7 @@ def read_npu() -> float:
         return 0.0
 
 
-# ── Background collector thread ───────────────────────────────────────────────
+# ── Background collector thread ────────────────��──────────────────────────────
 
 def collect_metrics() -> None:
     """Continuously collect and store metrics, purging old data periodically."""
@@ -261,17 +261,20 @@ def healthz():
     return jsonify({"status": "ok"})
 
 
+# ── Initialize database and start collector on module load ────────────────────
+# This ensures database is initialized when gunicorn imports the app module
+init_db()
+
+collector = threading.Thread(target=collect_metrics, daemon=True, name="collector")
+collector.start()
+log.info(
+    "Started collector thread (interval=%ds, retention=%dd)",
+    POLL_INTERVAL,
+    RETENTION_DAYS,
+)
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    init_db()
-
-    collector = threading.Thread(target=collect_metrics, daemon=True, name="collector")
-    collector.start()
-    log.info(
-        "Started collector thread (interval=%ds, retention=%dd)",
-        POLL_INTERVAL,
-        RETENTION_DAYS,
-    )
-
     app.run(host=HOST, port=PORT, debug=False)
