@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RK3566 Monitor</title>
+  <script src="/static/chart.umd.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent-cpu: #4ade80;
+      --accent-mem: #60a5fa;
+      --accent-npu: #f97316;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    header h1 span { color: var(--accent-npu); }
+
+    #status {
+      font-size: 0.78rem;
+      padding: 0.3rem 0.8rem;
+      border-radius: 99px;
+      font-weight: 600;
+      background: #1e3a2f;
+      color: var(--accent-cpu);
+      border: 1px solid #2d5a42;
+      transition: background 0.3s;
+    }
+
+    #status.error { background: #3a1e1e; color: #f87171; border-color: #5a2d2d; }
+
+    /* ── Gauge cards ── */
+    .gauges {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .gauge-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1rem;
+      text-align: center;
+    }
+
+    .gauge-card .label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .gauge-card .value {
+      font-size: 2.4rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .gauge-card.cpu  .value { color: var(--accent-cpu); }
+    .gauge-card.mem  .value { color: var(--accent-mem); }
+    .gauge-card.npu  .value { color: var(--accent-npu); }
+
+    .gauge-card .sub {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+    }
+
+    /* ── Chart panel ── */
+    .chart-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .panel-header h2 { font-size: 0.95rem; font-weight: 600; }
+
+    .time-btns { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+    .time-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .time-btn:hover, .time-btn.active {
+      background: var(--accent-cpu);
+      color: #0f1117;
+      border-color: var(--accent-cpu);
+      font-weight: 600;
+    }
+
+    .chart-wrap { position: relative; height: 300px; }
+
+    /* ── Export panel ── */
+    .export-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+    }
+
+    .export-panel h2 { font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; }
+
+    .export-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: flex-end;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 0.3rem; }
+    .field label { font-size: 0.75rem; color: var(--muted); }
+
+    input[type="datetime-local"] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.45rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+
+    .btn-export {
+      background: var(--accent-cpu);
+      color: #0f1117;
+      font-weight: 700;
+      border: none;
+      padding: 0.5rem 1.2rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .btn-export:hover { opacity: 0.85; }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.72rem;
+      margin-top: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>RK3566 <span>Monitor</span></h1>
+  <div id="status">● Connecting…</div>
+</header>
+
+<!-- Live gauges -->
+<div class="gauges">
+  <div class="gauge-card cpu">
+    <div class="label">CPU Usage</div>
+    <div class="value" id="val-cpu">—</div>
+    <div class="sub">percent</div>
+  </div>
+  <div class="gauge-card mem">
+    <div class="label">Memory Usage</div>
+    <div class="value" id="val-mem">—</div>
+    <div class="sub">percent</div>
+  </div>
+  <div class="gauge-card npu">
+    <div class="label">NPU Load</div>
+    <div class="value" id="val-npu">—</div>
+    <div class="sub">percent</div>
+  </div>
+</div>
+
+<!-- History chart -->
+<div class="chart-panel">
+  <div class="panel-header">
+    <h2>Usage History</h2>
+    <div class="time-btns">
+      <button class="time-btn active" data-hours="1">1h</button>
+      <button class="time-btn" data-hours="6">6h</button>
+      <button class="time-btn" data-hours="24">24h</button>
+      <button class="time-btn" data-hours="72">3d</button>
+      <button class="time-btn" data-hours="168">7d</button>
+    </div>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="chart"></canvas>
+  </div>
+</div>
+
+<!-- CSV Export -->
+<div class="export-panel">
+  <h2>Export CSV</h2>
+  <div class="export-form">
+    <div class="field">
+      <label for="exp-start">Start</label>
+      <input type="datetime-local" id="exp-start" />
+    </div>
+    <div class="field">
+      <label for="exp-end">End</label>
+      <input type="datetime-local" id="exp-end" />
+    </div>
+    <button class="btn-export" id="btn-export">⬇ Download CSV</button>
+  </div>
+</div>
+
+<footer>
+  OrangePi CM4 · RK3566 · Poll interval: <span id="cfg-poll">—</span>s ·
+  Retention: <span id="cfg-ret">—</span> days
+</footer>
+
+<script>
+// ── Chart setup ───────────────────────────────────────────────────────────────
+const ctx = document.getElementById('chart').getContext('2d');
+const MAX_LIVE_POINTS = 360;  // 1 hour of data at 10-second intervals
+
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      {
+        label: 'CPU %',
+        data: [],
+        borderColor: getComputedStyle(document.documentElement)
+          .getPropertyValue('--accent-cpu').trim(),
+        backgroundColor: 'rgba(74,222,128,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        borderWidth: 2,
+      },
+      {
+        label: 'Memory %',
+        data: [],
+        borderColor: getComputedStyle(document.documentElement)
+          .getPropertyValue('--accent-mem').trim(),
+        backgroundColor: 'rgba(96,165,250,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        borderWidth: 2,
+      },
+      {
+        label: 'NPU %',
+        data: [],
+        borderColor: getComputedStyle(document.documentElement)
+          .getPropertyValue('--accent-npu').trim(),
+        backgroundColor: 'rgba(249,115,22,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        borderWidth: 2,
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      x: {
+        ticks: {
+          color: '#94a3b8',
+          maxTicksLimit: 10,
+          maxRotation: 0,
+          font: { size: 11 },
+        },
+        grid: { color: '#1e2130' },
+      },
+      y: {
+        min: 0,
+        max: 100,
+        ticks: { color: '#94a3b8', font: { size: 11 }, callback: v => v + '%' },
+        grid: { color: '#1e2130' },
+      },
+    },
+    plugins: {
+      legend: { labels: { color: '#e2e8f0', font: { size: 12 }, boxWidth: 16 } },
+      tooltip: {
+        backgroundColor: '#1a1d27',
+        borderColor: '#2a2d3a',
+        borderWidth: 1,
+        titleColor: '#94a3b8',
+        bodyColor: '#e2e8f0',
+        callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%` },
+      },
+    },
+    animation: { duration: 300 },
+  },
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtTs(ts) {
+  // ts is "YYYY-MM-DDTHH:MM:SS"
+  const d = new Date(ts + 'Z');
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function setGauge(id, val) {
+  document.getElementById(id).textContent = (val === null ? '—' : val.toFixed(1) + '%');
+}
+
+function setStatus(ok) {
+  const el = document.getElementById('status');
+  if (ok) {
+    el.textContent = '● Live';
+    el.className = '';
+  } else {
+    el.textContent = '● Offline';
+    el.className = 'error';
+  }
+}
+
+// ── Load config ───────────────────────────────────────────────────────────────
+fetch('/api/config')
+  .then(r => r.json())
+  .then(cfg => {
+    document.getElementById('cfg-poll').textContent = cfg.poll_interval;
+    document.getElementById('cfg-ret').textContent  = cfg.retention_days;
+  })
+  .catch(() => {});
+
+// ── History loading ───────────────────────────────────────────────────────────
+let currentHours = 1;
+
+function loadHistory(hours) {
+  currentHours = hours;
+  fetch(`/api/metrics/history?hours=${hours}`)
+    .then(r => r.json())
+    .then(rows => {
+      chart.data.labels              = rows.map(r => fmtTs(r.timestamp));
+      chart.data.datasets[0].data   = rows.map(r => r.cpu);
+      chart.data.datasets[1].data   = rows.map(r => r.memory);
+      chart.data.datasets[2].data   = rows.map(r => r.npu);
+      chart.update('none');
+    })
+    .catch(console.error);
+}
+
+document.querySelectorAll('.time-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadHistory(+btn.dataset.hours);
+  });
+});
+
+loadHistory(1);
+
+// ── Live polling ──────────────────────────────────────────────────────────────
+async function pollLatest() {
+  try {
+    const r   = await fetch('/api/metrics/latest');
+    if (!r.ok) throw new Error('non-OK');
+    const row = await r.json();
+
+    setGauge('val-cpu', row.cpu);
+    setGauge('val-mem', row.memory);
+    setGauge('val-npu', row.npu);
+    setStatus(true);
+
+    // Append to chart if still on the live window
+    const label = fmtTs(row.timestamp);
+    if (!chart.data.labels.length || chart.data.labels[chart.data.labels.length - 1] !== label) {
+      chart.data.labels.push(label);
+      chart.data.datasets[0].data.push(row.cpu);
+      chart.data.datasets[1].data.push(row.memory);
+      chart.data.datasets[2].data.push(row.npu);
+
+      // Trim to MAX_LIVE_POINTS
+      if (chart.data.labels.length > MAX_LIVE_POINTS) {
+        chart.data.labels.shift();
+        chart.data.datasets.forEach(ds => ds.data.shift());
+      }
+      chart.update('none');
+    }
+  } catch {
+    setStatus(false);
+  }
+}
+
+// Fetch config to know poll interval, default 10s
+let pollMs = 10000;
+fetch('/api/config')
+  .then(r => r.json())
+  .then(cfg => { pollMs = cfg.poll_interval * 1000; })
+  .finally(() => {
+    pollLatest();
+    setInterval(pollLatest, pollMs);
+  });
+
+// ── CSV Export ────────────────────────────────────────────────────────────────
+// Pre-fill defaults: last 24 hours
+(function initExportDefaults() {
+  const MS_PER_DAY = 24 * 3600 * 1000;
+  const now  = new Date();
+  const yesterday = new Date(now - MS_PER_DAY);
+  const toLocal = d => new Date(d - d.getTimezoneOffset() * 60000)
+    .toISOString().slice(0, 16);
+  document.getElementById('exp-start').value = toLocal(yesterday);
+  document.getElementById('exp-end').value   = toLocal(now);
+})();
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  const start = document.getElementById('exp-start').value;
+  const end   = document.getElementById('exp-end').value;
+  if (!start || !end) { alert('Please select start and end date/time.'); return; }
+  const url = `/api/metrics/export?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+  window.location.href = url;
+});
+</script>
+</body>
+</html>
