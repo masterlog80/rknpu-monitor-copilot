@@ -288,15 +288,15 @@ def api_history():
     with get_db() as conn:
         # Get recent fine-grained data
         recent_rows = conn.execute(
-            "SELECT timestamp as time, cpu, memory, npu FROM metrics "
+            "SELECT timestamp, cpu, memory, npu FROM metrics "
             "WHERE timestamp BETWEEN ? AND ? AND timestamp >= ? "
             "ORDER BY timestamp ASC",
             (start, end, cutoff),
         ).fetchall()
 
-        # Get older downsampled data
+        # Get older downsampled data - normalize hour to timestamp
         older_rows = conn.execute(
-            "SELECT hour as time, cpu, memory, npu FROM metrics_downsampled "
+            "SELECT hour as timestamp, cpu, memory, npu FROM metrics_downsampled "
             "WHERE hour BETWEEN ? AND ? AND hour < ? "
             "ORDER BY hour ASC",
             (start, end, cutoff),
