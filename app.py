@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import psutil
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, send_file
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 TS_FORMAT = "%Y-%m-%dT%H:%M:%S"
@@ -243,6 +243,12 @@ def collect_metrics() -> None:
 
 # ── REST API ──────────────────────────────────────────────────────────────────
 
+@app.route("/favicon.svg")
+def favicon():
+    """Serve the favicon."""
+    return send_file('favicon.svg', mimetype='image/svg+xml')
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -265,10 +271,9 @@ def api_history():
     """
     Return metrics for a time window.
     Query params:
-      days   – look-back window in days (e.g., days=7 for last 7 days)
       hours  – look-back window in hours (default 1)
-      start  – ISO-8601 start datetime (overrides hours/days)
-      end    – ISO-8601 end datetime   (overrides hours/days)
+      start  – ISO-8601 start datetime (overrides hours)
+      end    – ISO-8601 end datetime   (overrides hours)
     Automatically uses downsampled data for periods older than 24 hours.
     """
     now = datetime.now(timezone.utc)
@@ -280,20 +285,8 @@ def api_history():
         start = start_str.replace("Z", "").split(".")[0]
         end = end_str.replace("Z", "").split(".")[0]
     else:
-        # Check for days parameter first, then hours
-        days_param = request.args.get("days")
-        hours_param = request.args.get("hours")
-        
-        if days_param:
-            try:
-                days = float(days_param)
-                start = (now - timedelta(days=days)).strftime(TS_FORMAT)
-            except ValueError:
-                start = (now - timedelta(hours=1)).strftime(TS_FORMAT)
-        else:
-            hours = float(hours_param) if hours_param else 1
-            start = (now - timedelta(hours=hours)).strftime(TS_FORMAT)
-        
+        hours = float(request.args.get("hours", "1"))
+        start = (now - timedelta(hours=hours)).strftime(TS_FORMAT)
         end = now.strftime(TS_FORMAT)
 
     cutoff = (now - timedelta(hours=DOWNSAMPLE_AFTER_HOURS)).strftime(TS_FORMAT)
@@ -324,11 +317,7 @@ def api_history():
 def api_export():
     """
     Export metrics as CSV.
-    Query params: 
-      days   – look-back window in days (e.g., days=7 for last 7 days)
-      hours  – look-back window in hours (default 24)
-      start  – ISO-8601 start datetime (overrides hours/days)
-      end    – ISO-8601 end datetime   (overrides hours/days)
+    Query params: start, end (ISO-8601) or hours (look-back window).
     """
     now = datetime.now(timezone.utc)
 
@@ -339,20 +328,8 @@ def api_export():
         start = start_str.replace("Z", "").split(".")[0]
         end = end_str.replace("Z", "").split(".")[0]
     else:
-        # Check for days parameter first, then hours
-        days_param = request.args.get("days")
-        hours_param = request.args.get("hours")
-        
-        if days_param:
-            try:
-                days = float(days_param)
-                start = (now - timedelta(days=days)).strftime(TS_FORMAT)
-            except ValueError:
-                start = (now - timedelta(hours=24)).strftime(TS_FORMAT)
-        else:
-            hours = float(hours_param) if hours_param else 24
-            start = (now - timedelta(hours=hours)).strftime(TS_FORMAT)
-        
+        hours = float(request.args.get("hours", "24"))
+        start = (now - timedelta(hours=hours)).strftime(TS_FORMAT)
         end = now.strftime(TS_FORMAT)
 
     cutoff = (now - timedelta(hours=DOWNSAMPLE_AFTER_HOURS)).strftime(TS_FORMAT)
