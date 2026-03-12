@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# SQLite database
+*.db
+*.sqlite3
+
+# Docker
+.dockerignore
+
+# npm / tarballs
+node_modules/
+*.tgz
+
+# Environment files (keep .env.example, exclude .env with real secrets)
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
