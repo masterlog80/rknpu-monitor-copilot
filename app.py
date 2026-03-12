@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import psutil
-from flask import Flask, Response, jsonify, render_template, request, send_file
+from flask import Flask, Response, jsonify, render_template, request
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 TS_FORMAT = "%Y-%m-%dT%H:%M:%S"
@@ -242,12 +242,6 @@ def collect_metrics() -> None:
 
 
 # ── REST API ──────────────────────────────────────────────────────────────────
-
-@app.route("/favicon.svg")
-def favicon():
-    """Serve the favicon."""
-    return send_file('favicon.svg', mimetype='image/svg+xml')
-
 
 @app.route("/")
 def index():
