@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background -->
+  <rect width="100" height="100" fill="#1a1a2e" rx="10"/>
+  
+  <!-- CPU Die (center square) -->
+  <rect x="30" y="30" width="40" height="40" fill="#00d4ff" stroke="#0099cc" stroke-width="2" rx="4"/>
+  
+  <!-- CPU Core lines -->
+  <line x1="35" y1="35" x2="35" y2="65" stroke="#0099cc" stroke-width="1" opacity="0.6"/>
+  <line x1="50" y1="35" x2="50" y2="65" stroke="#0099cc" stroke-width="1" opacity="0.6"/>
+  <line x1="65" y1="35" x2="65" y2="65" stroke="#0099cc" stroke-width="1" opacity="0.6"/>
+  
+  <line x1="30" y1="50" x2="70" y2="50" stroke="#0099cc" stroke-width="1" opacity="0.6"/>
+  
+  <!-- CPU Pins (left) -->
+  <rect x="15" y="35" width="12" height="6" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+  <rect x="15" y="45" width="12" height="6" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+  <rect x="15" y="55" width="12" height="6" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+  
+  <!-- CPU Pins (right) -->
+  <rect x="73" y="35" width="12" height="6" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+  <rect x="73" y="45" width="12" height="6" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+  <rect x="73" y="55" width="12" height="6" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+  
+  <!-- CPU Pins (top) -->
+  <rect x="35" y="15" width="6" height="12" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+  <rect x="45" y="15" width="6" height="12" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+  <rect x="55" y="15" width="6" height="12" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+  
+  <!-- CPU Pins (bottom) -->
+  <rect x="35" y="73" width="6" height="12" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+  <rect x="45" y="73" width="6" height="12" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+  <rect x="55" y="73" width="6" height="12" fill="#ff6b35" stroke="#cc5500" stroke-width="1" rx="1"/>
+</svg>
