@@ -44,3 +44,7 @@ services:
 volumes:
   rknpu-data:
     driver: local
+    
+networks:
+  rknpu-monitor-copilot:
+    driver: bridge
