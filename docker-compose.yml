@@ -1,10 +1,10 @@
 services:
-  rknpu-monitor:
+  rknpu-monitor-copilot:
     build:
       context: .
       dockerfile: Dockerfile
-    image: rknpu-monitor:latest
-    container_name: rknpu-monitor
+    image: rknpu-monitor-copilot:latest
+    container_name: rknpu-monitor-copilot
     restart: unless-stopped
 
     # ── Networking ────────────────────────────────────────────────────────────
