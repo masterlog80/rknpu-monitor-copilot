@@ -10,7 +10,7 @@ services:
     # ── Networking ────────────────────────────────────────────────────────────
     ports:
       #- "${HOST_PORT:-8080}:5000"
-      - 5000'5000
+      - 5000:5000
 
     # ── Privileged access for NPU debug interface ─────────────────────────────
     # debugfs (/sys/kernel/debug) on RK3566 typically requires privileged mode.
@@ -45,7 +45,7 @@ services:
 volumes:
   rknpu-data:
     driver: local
-    
+
 networks:
   rknpu-monitor-copilot:
     driver: bridge
