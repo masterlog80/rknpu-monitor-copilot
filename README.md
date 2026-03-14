@@ -16,6 +16,7 @@ SQLite, and exposes a live web dashboard with interactive charts and CSV export.
 | **Data Retention** | 14 days (configurable) |
 | **Polling Interval** | 10 seconds (configurable) |
 | **CSV Export** | User-selectable date/time range |
+| **Prometheus Export** | `/metrics` endpoint in text exposition format |
 | **Storage** | SQLite in a named Docker volume |
 | **Architecture** | `linux/arm64` – native on RK3566 |
 
@@ -100,6 +101,71 @@ read-only so the backend can read the NPU load from
 | `/api/metrics/export` | GET | Download CSV – params: `start`+`end` or `hours` |
 | `/api/config` | GET | Runtime configuration |
 | `/healthz` | GET | Health check |
+| `/metrics` | GET | Prometheus metrics (text exposition format) |
+
+---
+
+## Prometheus Integration
+
+The `/metrics` endpoint exposes metrics in the
+[Prometheus text exposition format](https://prometheus.io/docs/instrumenting/exposition_formats/).
+
+### Available metrics
+
+| Metric | Type | Description |
+|---|---|---|
+| `rknpu_cpu_percent` | gauge | Current CPU usage percentage |
+| `rknpu_memory_percent` | gauge | Current memory usage percentage |
+| `rknpu_npu_percent` | gauge | Current NPU usage percentage |
+| `rknpu_sample_timestamp_seconds` | gauge | Unix timestamp of the last collected sample |
+| `rknpu_samples_total` | counter | Number of fine-grained samples currently in the database |
+| `rknpu_database_records` | gauge | Total records in the database (fine-grained + downsampled) |
+
+### Quick check
+
+```bash
+curl http://<device-ip>:5000/metrics
+```
+
+Example output:
+
+```
+# HELP rknpu_cpu_percent Current CPU usage percentage
+# TYPE rknpu_cpu_percent gauge
+rknpu_cpu_percent 12.5
+# HELP rknpu_memory_percent Current memory usage percentage
+# TYPE rknpu_memory_percent gauge
+rknpu_memory_percent 45.2
+# HELP rknpu_npu_percent Current NPU usage percentage
+# TYPE rknpu_npu_percent gauge
+rknpu_npu_percent 8.0
+# HELP rknpu_sample_timestamp_seconds Unix timestamp of the last collected sample
+# TYPE rknpu_sample_timestamp_seconds gauge
+rknpu_sample_timestamp_seconds 1710374827.000
+# HELP rknpu_samples_total Total number of metric samples stored in the database
+# TYPE rknpu_samples_total counter
+rknpu_samples_total 8640
+# HELP rknpu_database_records Current number of records (fine-grained + downsampled) in the database
+# TYPE rknpu_database_records gauge
+rknpu_database_records 8640
+```
+
+### Prometheus scrape configuration
+
+Add the following snippet to your `prometheus.yml` (see `.prometheus.yml` in
+this repository for a complete example):
+
+```yaml
+scrape_configs:
+  - job_name: rknpu-monitor
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - "<device-ip>:5000"
+        labels:
+          instance: orangepi-cm4
+          board: rk3566
+```
 
 ---
 
@@ -129,6 +195,7 @@ docker run --rm \
 ├── Dockerfile           # Multi-stage, arm64-compatible image
 ├── docker-compose.yml   # Deployment configuration
 ├── .env.example         # Example environment variables
+├── .prometheus.yml      # Example Prometheus scrape configuration
 ├── requirements.txt     # Python dependencies
 └── README.md
 ```
