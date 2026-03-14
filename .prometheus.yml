@@ -1,0 +1,24 @@
+# Example Prometheus configuration for scraping rknpu-monitor-copilot.
+#
+# Copy / merge this snippet into your existing prometheus.yml and replace
+# <device-ip> with the IP address (or hostname) of your OrangePi CM4.
+#
+# Then restart Prometheus:
+#   docker compose restart prometheus   # if running in Docker
+#   systemctl restart prometheus        # if running as a service
+
+global:
+  scrape_interval: 15s      # How often to scrape targets (default: 1m)
+  evaluation_interval: 15s  # How often to evaluate rules
+
+scrape_configs:
+  - job_name: rknpu-monitor
+    # Scrape the /metrics endpoint every 15 seconds.
+    # Adjust scrape_interval to match your POLL_INTERVAL if needed.
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - "<device-ip>:5000"   # Replace with your device IP / hostname
+        labels:
+          instance: orangepi-cm4
+          board: rk3566
