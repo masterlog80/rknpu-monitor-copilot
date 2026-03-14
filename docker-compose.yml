@@ -33,17 +33,6 @@ services:
       - PORT=5000
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
 
-    # ── Prometheus metrics ────────────────────────────────────────────────────
-    # The /metrics endpoint exposes Prometheus-compatible metrics on port 5000.
-    # To scrape with Prometheus, add the following to your prometheus.yml:
-    #
-    #   scrape_configs:
-    #     - job_name: rknpu-monitor
-    #       static_configs:
-    #         - targets: ['<device-ip>:5000']
-    #
-    # See .prometheus.yml in this repository for a complete example.
-
     # ── Healthcheck ───────────────────────────────────────────────────────────
     healthcheck:
       test: ["CMD", "python", "-c",

@@ -371,65 +371,6 @@ def api_config():
     )
 
 
-@app.route("/metrics")
-def metrics():
-    """
-    Prometheus text exposition format endpoint.
-    Exposes rknpu_* gauge/counter metrics for scraping by Prometheus.
-    """
-    now_ts = time.time()
-
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT timestamp, cpu, memory, npu FROM metrics ORDER BY timestamp DESC LIMIT 1"
-        ).fetchone()
-        total_fine = conn.execute("SELECT COUNT(*) FROM metrics").fetchone()[0]
-        total_down = conn.execute("SELECT COUNT(*) FROM metrics_downsampled").fetchone()[0]
-
-    total_records = total_fine + total_down
-
-    if row is not None:
-        cpu = row["cpu"]
-        memory = row["memory"]
-        npu = row["npu"]
-        # Parse ISO-8601 timestamp to Unix epoch
-        try:
-            sample_dt = datetime.strptime(row["timestamp"], TS_FORMAT).replace(
-                tzinfo=timezone.utc
-            )
-            sample_ts = sample_dt.timestamp()
-        except ValueError:
-            sample_ts = now_ts
-    else:
-        cpu = 0.0
-        memory = 0.0
-        npu = 0.0
-        sample_ts = now_ts
-
-    lines = [
-        "# HELP rknpu_cpu_percent Current CPU usage percentage",
-        "# TYPE rknpu_cpu_percent gauge",
-        f"rknpu_cpu_percent {cpu}",
-        "# HELP rknpu_memory_percent Current memory usage percentage",
-        "# TYPE rknpu_memory_percent gauge",
-        f"rknpu_memory_percent {memory}",
-        "# HELP rknpu_npu_percent Current NPU usage percentage",
-        "# TYPE rknpu_npu_percent gauge",
-        f"rknpu_npu_percent {npu}",
-        "# HELP rknpu_sample_timestamp_seconds Unix timestamp of the last collected sample",
-        "# TYPE rknpu_sample_timestamp_seconds gauge",
-        f"rknpu_sample_timestamp_seconds {sample_ts:.3f}",
-        "# HELP rknpu_samples_total Total number of fine-grained samples currently in the database",
-        "# TYPE rknpu_samples_total counter",
-        f"rknpu_samples_total {total_fine}",
-        "# HELP rknpu_database_records Total number of records in the database (fine-grained + downsampled)",
-        "# TYPE rknpu_database_records gauge",
-        f"rknpu_database_records {total_records}",
-        "",
-    ]
-    return Response("\n".join(lines), mimetype="text/plain; version=0.0.4; charset=utf-8")
-
-
 @app.route("/healthz")
 def healthz():
     return jsonify({"status": "ok"})
