@@ -6,6 +6,12 @@ SQLite, and exposes a live web dashboard with interactive charts and CSV export.
 
 ---
 
+## UI Preview
+
+![RK3566 Monitor Dashboard](https://github.com/user-attachments/assets/76e84c15-83dd-4ee1-8aad-c0cd75e6a369)
+
+---
+
 ## Features
 
 | Feature | Details |
